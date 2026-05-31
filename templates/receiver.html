@@ -1,70 +1,469 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CCTV Dashboard</title>
+    <title>Surveillance Console</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socketio/4.7.2/socketio.min.js"></script>
     <style>
-        body { font-family: sans-serif; background: #121212; color: white; padding: 20px; text-align: center; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-top: 20px; }
-        .video-box { background: #1e1e1e; padding: 10px; border-radius: 8px; position: relative; }
-        video { width: 100%; background: black; border-radius: 4px; }
-        .label { position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.7); padding: 5px; border-radius: 4px; font-size: 14px; }
+        :root {
+            --bg-color: #1e222b;
+            --card-bg: #252a34;
+            --border-color: #3b4252;
+            --text-color: #e5e9f0;
+            --accent-blue: #5e81ac;
+            --alarm-red: #bf616a;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            padding: 20px 20px 100px 20px;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+
+        .scanlines {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+            background-size: 100% 4px, 6px 100%;
+            z-index: 999;
+            pointer-events: none;
+        }
+
+        .matrix-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 24px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .cam-wrapper {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            overflow: hidden;
+            position: relative;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .cam-wrapper.heist-mode-alarm {
+            border-color: var(--alarm-red);
+            animation: pulse-border 1s infinite alternate;
+        }
+
+        @keyframes pulse-border {
+            from { box-shadow: 0 0 4px var(--alarm-red); }
+            to { box-shadow: 0 0 16px var(--alarm-red); }
+        }
+
+        .feed-container {
+            position: relative;
+            width: 100%;
+            padding-top: 56.25%;
+            background: #111;
+            overflow: hidden;
+        }
+
+        .feed-container video {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            object-fit: cover;
+            transition: transform 0.2s ease;
+            transform-origin: center center;
+            cursor: zoom-in;
+        }
+
+        .feed-container video.zoomed {
+            transform: scale(2);
+            cursor: zoom-out;
+        }
+
+        .motion-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .cctv-hud {
+            position: absolute;
+            top: 12px; left: 12px; right: 12px;
+            display: flex;
+            justify-content: space-between;
+            font-family: monospace;
+            font-size: 11px;
+            color: rgba(229, 233, 240, 0.85);
+            text-shadow: 1px 1px 2px black;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .hud-left { display: flex; align-items: center; gap: 6px; }
+        .live-indicator {
+            width: 6px; height: 6px; background-color: #a3be8c;
+            border-radius: 50%; display: inline-block;
+        }
+
+        .action-tray {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            background: rgba(37, 42, 52, 0.95);
+            border-top: 1px solid var(--border-color);
+            padding: 8px 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transform: translateY(100%);
+            transition: transform 0.25s ease-in-out;
+            z-index: 20;
+        }
+
+        .cam-wrapper:hover .action-tray {
+            transform: translateY(0);
+        }
+
+        .tray-btn {
+            background: none; border: 1px solid var(--border-color);
+            color: var(--text-color); padding: 4px 10px;
+            font-size: 11px; border-radius: 4px; cursor: pointer;
+        }
+        .tray-btn:hover { background: rgba(255,255,255,0.05); }
+        .tray-select {
+            background: var(--bg-color); border: 1px solid var(--border-color);
+            color: var(--text-color); font-size: 11px; padding: 3px; border-radius: 4px;
+        }
+
+        .master-console {
+            position: fixed;
+            bottom: 20px; left: 50%;
+            transform: translateX(-50%);
+            width: calc(100% - 40px);
+            max-width: 850px;
+            background: rgba(37, 42, 52, 0.65);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 30px;
+            padding: 12px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-sizing: border-box;
+            z-index: 1000;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .console-segments { display: flex; align-items: center; gap: 20px; }
+        .security-clock { font-family: monospace; font-size: 14px; letter-spacing: 1px; color: #81a1c1; }
+        .stat-item { font-size: 12px; color: #d8dee9; }
+
+        .console-buttons { display: flex; gap: 10px; }
+
+        .master-toggle-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color); color: var(--text-color);
+            padding: 6px 16px; border-radius: 20px;
+            cursor: pointer; font-size: 11px; font-weight: 500;
+            transition: all 0.2s;
+        }
+        .master-toggle-btn.active-green {
+            background: rgba(163, 190, 140, 0.2);
+            border-color: #a3be8c; color: #a3be8c;
+        }
+        .master-toggle-btn.active-yellow {
+            background: rgba(235, 203, 139, 0.2);
+            border-color: #ebcb8b; color: #ebcb8b;
+        }
+
+        .heist-banner {
+            display: none; position: fixed; top: 0; left: 0; width: 100%;
+            background: var(--alarm-red); color: white; text-align: center;
+            padding: 10px 0; font-size: 13px; font-weight: bold; letter-spacing: 1px;
+            z-index: 2000; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .footer-branding {
+            text-align: center;
+            margin-top: 60px;
+            padding: 20px 0;
+            font-size: 11px;
+            color: rgba(229, 233, 240, 0.25);
+            font-family: monospace;
+            letter-spacing: 2px;
+        }
     </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
 </head>
 <body>
-    <h2>📱 Live CCTV Monitor Dashboard</h2>
-    <p>Room Monitoring Code: <strong style="color:#007bff;">{{ room_id }}</strong></p>
-    <div class="grid" id="cameraGrid"></div>
-    <script>
-        const socket = io();
-        const roomId = "{{ room_id }}";
-        let peerConnections = {};
 
-        socket.emit('receiver_join', { room: roomId });
+<div class="scanlines"></div>
+<div id="heistAlertBanner" class="heist-banner">CRITICAL OVERRIDE: MOTION TRACKED ON NODE [HEIST]</div>
 
-        socket.on('signal', async (data) => {
-            if (data.to && data.to !== socket.id) return;
-            let pc = peerConnections[data.from];
-            if (data.answer) {
-                await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-            } else if (data.candidate && pc) {
-                await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+<div class="matrix-grid" id="nodeMatrix"></div>
+
+<div class="footer-branding">Atulya Tech System Architecture</div>
+
+<div class="master-console">
+    <div class="console-segments">
+        <div class="security-clock" id="liveClock">00:00:00</div>
+        <div class="stat-item">NODES: <span id="activeCount">0</span></div>
+        <div class="stat-item">PING: <span id="pingCounter">--</span>ms</div>
+    </div>
+    <div class="console-buttons">
+        <button class="master-toggle-btn active-green" id="boxToggleBtn" onclick="toggleTrackingBoxes()">BOXES: ON</button>
+        <button class="master-toggle-btn" id="globalMuteBtn" onclick="toggleGlobalMute()">MUTED</button>
+    </div>
+</div>
+
+<script>
+    const roomCode = "${room_code}";
+    const socket = io();
+    const nodeMatrix = document.getElementById('nodeMatrix');
+    const peers = {};
+    const streamTimers = {};
+    let isGlobalMuted = true;
+    let showTrackingBoxes = true; // Variable managing layout execution status
+
+    socket.emit('join_room', { room: roomCode, role: 'receiver' });
+
+    setInterval(() => {
+        const start = Date.now();
+        socket.emit('ping_test', () => {
+            document.getElementById('pingCounter').innerText = Date.now() - start;
+        });
+    }, 3000);
+
+    function updateSystemClock() {
+        const now = new Date();
+        document.getElementById('liveClock').innerText = now.toTimeString().split(' ')[0];
+    }
+    setInterval(updateSystemClock, 1000);
+
+    socket.on('camera_connected', (data) => {
+        buildCameraCard(data.id, data.name, data.is_heist);
+        connectPeer(data.id);
+        updateNodeCount();
+    });
+
+    socket.on('camera_disconnected', (data) => {
+        const targetCard = document.getElementById(`node-${data.id}`);
+        if(targetCard) targetCard.remove();
+        if(peers[data.id]) peers[data.id].close();
+        clearInterval(streamTimers[data.id]);
+        updateNodeCount();
+    });
+
+    socket.on('signal', (data) => {
+        if(peers[data.sender]) peers[data.sender].setRemoteDescription(new RTCSessionDescription(data.signal));
+    });
+
+    socket.on('trigger_alarm', (data) => {
+        const banner = document.getElementById('heistAlertBanner');
+        const card = document.getElementById(`node-${data.cam_id}`);
+        
+        banner.style.display = 'block';
+        if(card) card.classList.add('heist-mode-alarm');
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let osc = audioCtx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+        osc.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.4);
+
+        setTimeout(() => {
+            banner.style.display = 'none';
+            if(card) card.classList.remove('heist-mode-alarm');
+        }, 4000);
+    });
+
+    function buildCameraCard(id, name, isHeist) {
+        if(document.getElementById(`node-${id}`)) return;
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'cam-wrapper';
+        wrapper.id = `node-${id}`;
+
+        wrapper.innerHTML = `
+            <div class="feed-container">
+                <div class="cctv-hud">
+                    <div class="hud-left">
+                        <span class="live-indicator"></span>
+                        <span>${name.toUpperCase()}</span>
+                    </div>
+                    <div id="time-${id}">00:00:00</div>
+                </div>
+                <video id="video-${id}" autoplay playsinline muted onclick="toggleZoom(this)"></video>
+                <canvas id="canvas-${id}" class="motion-layer"></canvas>
+                <div class="action-tray">
+                    <button class="tray-btn" onclick="takeSnapshot('${id}', '${name}')">📸 CAPTURE</button>
+                    <select class="tray-select" onchange="changeQuality('${id}', this.value)">
+                        <option value="480p">480p</option>
+                        <option value="1080p" selected>1080p</option>
+                    </select>
+                    <button class="tray-btn" onclick="toggleFullscreen('${id}')">FULLSCREEN</button>
+                </div>
+            </div>
+        `;
+        nodeMatrix.appendChild(wrapper);
+        initiateUptime(id);
+        bindMotionAnalysis(id);
+    }
+
+    function toggleZoom(videoElement) {
+        videoElement.classList.toggle('zoomed');
+    }
+
+    // Toggle Tracking Boxes Handler Function
+    if (!window.toggleTrackingBoxes) {
+        window.toggleTrackingBoxes = function() {
+            showTrackingBoxes = !showTrackingBoxes;
+            const btn = document.getElementById('boxToggleBtn');
+            if(showTrackingBoxes) {
+                btn.innerText = "BOXES: ON";
+                btn.className = "master-toggle-btn active-green";
+            } else {
+                btn.innerText = "BOXES: OFF";
+                btn.className = "master-toggle-btn";
+                // Wipe current floating vectors immediately upon cutoff
+                document.querySelectorAll('.motion-layer').forEach(canvas => {
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                });
             }
+        };
+    }
+
+    function takeSnapshot(id, name) {
+        const video = document.getElementById(`video-${id}`);
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        const link = document.createElement('a');
+        link.download = `SNAP_${name.toUpperCase()}_${Date.now()}.png`;
+        link.href = canvas.toDataURL();
+        link.click();
+    }
+
+    function toggleGlobalMute() {
+        isGlobalMuted = !isGlobalMuted;
+        const btn = document.getElementById('globalMuteBtn');
+        if(isGlobalMuted) {
+            btn.innerText = "MUTED";
+            btn.className = "master-toggle-btn";
+        } else {
+            btn.innerText = "LISTENING";
+            btn.className = "master-toggle-btn active-yellow";
+        }
+
+        document.querySelectorAll('video').forEach(v => {
+            v.muted = isGlobalMuted;
         });
+    }
 
-        socket.on('new_camera_online', async (data) => {
-            const camId = data.id, camName = data.name;
-            if (document.getElementById(camId)) return;
-
-            const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-            peerConnections[camId] = pc;
-
-            pc.onicecandidate = (e) => { if (e.candidate) socket.emit('signal', { room: roomId, to: camId, from: socket.id, candidate: e.candidate }); };
-            pc.ontrack = (e) => {
-                if (document.getElementById(camId)) return;
-                const grid = document.getElementById('cameraGrid');
-                const box = document.createElement('div');
-                box.className = 'video-box'; box.id = camId;
-                const video = document.createElement('video');
-                video.srcObject = e.streams[0]; video.autoplay = true; video.playsInline = true;
-                const label = document.createElement('div');
-                label.className = 'label'; label.innerText = camName;
-                box.appendChild(video); box.appendChild(label); grid.appendChild(box);
-            };
-
-            const offer = await pc.createOffer({ offerToReceiveVideo: true });
-            await pc.setLocalDescription(offer);
-            socket.emit('signal', { room: roomId, to: camId, from: socket.id, offer: offer });
+    function changeQuality(id, resValue) {
+        socket.emit('signal', {
+            target: id,
+            signal: { type: 'resolution_change', value: resValue },
+            room: roomCode
         });
+    }
 
-        socket.on('camera_disconnected', (camId) => {
-            const el = document.getElementById(camId);
-            if (el) el.remove();
-            if (peerConnections[camId]) { peerConnections[camId].close(); delete peerConnections[camId]; }
+    function toggleFullscreen(id) {
+        const el = document.getElementById(`node-${id}`);
+        if (!document.fullscreenElement) el.requestFullscreen();
+        else document.exitFullscreen();
+    }
+
+    function initiateUptime(id) {
+        let sec = 0;
+        streamTimers[id] = setInterval(() => {
+            sec++;
+            let h = String(Math.floor(sec / 3600)).padStart(2, '0');
+            let m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
+            let s = String(sec % 60).padStart(2, '0');
+            document.getElementById(`time-${id}`).innerText = `${h}:${m}:${s}`;
+        }, 1000);
+    }
+
+    function updateNodeCount() {
+        document.getElementById('activeCount').innerText = Object.keys(peers).length;
+    }
+
+    function connectPeer(camId) {
+        const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+        peers[camId] = pc;
+        pc.ontrack = (e) => {
+            const v = document.getElementById(`video-${camId}`);
+            if(v) v.srcObject = e.streams[0];
+        };
+        pc.createOffer().then(o => pc.setLocalDescription(o)).then(() => {
+            socket.emit('signal', { target: camId, signal: pc.localDescription, room: roomCode });
         });
-    </script>
+    }
+
+    function bindMotionAnalysis(id) {
+        const video = document.getElementById(`video-${id}`);
+        const canvas = document.getElementById(`canvas-${id}`);
+        if(!canvas) return;
+        const ctx = canvas.getContext('2d');
+        let priorFrame;
+
+        function process() {
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                if (canvas.width !== video.videoWidth) {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                }
+                
+                // Read pixels into engine memory buffer
+                const bufferCanvas = document.createElement('canvas');
+                bufferCanvas.width = canvas.width;
+                bufferCanvas.height = canvas.height;
+                const bufferCtx = bufferCanvas.getContext('2d');
+                bufferCtx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const currentFrame = bufferCtx.getImageData(0, 0, canvas.width, canvas.height);
+                
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // Only render outline processing parameters if configuration state is active
+                if (priorFrame && showTrackingBoxes) {
+                    let minX = canvas.width, maxX = 0, minY = canvas.height, maxY = 0;
+                    let hits = 0;
+
+                    for (let i = 0; i < currentFrame.data.length; i += 4) {
+                        const d = Math.abs(currentFrame.data[i] - priorFrame.data[i]) + 
+                                  Math.abs(currentFrame.data[i+1] - priorFrame.data[i+1]) + 
+                                  Math.abs(currentFrame.data[i+2] - priorFrame.data[i+2]);
+                        if (d > 95) {
+                            const idx = i / 4;
+                            const x = idx % canvas.width;
+                            const y = Math.floor(idx / canvas.width);
+                            if(x < minX) minX = x; if(x > maxX) maxX = x;
+                            if(y < minY) minY = y; if(y > maxY) maxY = y;
+                            hits++;
+                        }
+                    }
+                    if (hits > 450) {
+                        ctx.strokeStyle = '#00d2ff';
+                        ctx.lineWidth = 3;
+                        ctx.strokeRect(minX, minY, (maxX - minX), (maxY - minY));
+                    }
+                }
+                priorFrame = currentFrame;
+            }
+            requestAnimationFrame(process);
+        }
+        video.addEventListener('play', () => requestAnimationFrame(process));
+    }
+</script>
 </body>
 </html>
 
