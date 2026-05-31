@@ -100,19 +100,25 @@
                 window.location.href = '/receiver/' + data.room_code;
             }
         })
-        .catch(err => alert("Session initialization error. check server logs."));
+        .catch(err => alert("Session initialization error."));
     }
 
     function joinExistingRoom() {
         const code = document.getElementById('roomInput').value.trim().toUpperCase();
-        if(code.length === 6) {
+        if(code.length !== 6) {
+            alert("Please input a valid 6-character node token.");
+            return;
+        }
+        
+        // Let the user select their device profile role dynamically
+        const choice = confirm("Press OK to join as a MONITOR SCREEN (Receiver).\nPress CANCEL to join as a CAMERA FEED (Transmitter).");
+        if (choice) {
             window.location.href = '/receiver/' + code;
         } else {
-            alert("Please input a valid 6-character node token.");
+            window.location.href = '/camera/' + code;
         }
     }
 </script>
 </body>
 </html>
-
 

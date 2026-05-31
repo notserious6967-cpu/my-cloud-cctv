@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Atulya Tech Console V2</title>
-
+    <title>Atulya Tech Console</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socketio/4.7.2/socketio.min.js"></script>
     <style>
         :root {
@@ -33,6 +32,27 @@
             background-size: 100% 4px, 6px 100%;
             z-index: 999;
             pointer-events: none;
+        }
+
+        /* Top Bar displaying the Access Code clearly on screen */
+        .top-status-header {
+            max-width: 1400px;
+            margin: 0 auto 20px auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-family: monospace;
+            background: #252a34;
+            padding: 12px 20px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+        }
+
+        .access-code-display {
+            font-size: 16px;
+            font-weight: bold;
+            color: #88c0d0;
+            letter-spacing: 1px;
         }
 
         .matrix-grid {
@@ -110,6 +130,27 @@
             border-radius: 50%; display: inline-block;
         }
 
+        .feed-audio-toggle {
+            position: absolute;
+            bottom: 45px; right: 12px;
+            z-index: 30;
+            background: rgba(37, 42, 52, 0.75);
+            border: 1px solid var(--border-color);
+            color: #ebcb8b;
+            width: 32px; height: 32px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+            transition: background 0.2s;
+        }
+        .feed-audio-toggle.muted {
+            color: rgba(229, 233, 240, 0.4);
+        }
+
         .action-tray {
             position: absolute;
             bottom: 0; left: 0; right: 0;
@@ -163,8 +204,6 @@
         .security-clock { font-family: monospace; font-size: 14px; letter-spacing: 1px; color: #81a1c1; }
         .stat-item { font-size: 12px; color: #d8dee9; }
 
-        .console-buttons { display: flex; gap: 10px; }
-
         .master-toggle-btn {
             background: rgba(255, 255, 255, 0.05);
             border: 1px solid var(--border-color); color: var(--text-color);
@@ -175,10 +214,6 @@
         .master-toggle-btn.active-green {
             background: rgba(163, 190, 140, 0.2);
             border-color: #a3be8c; color: #a3be8c;
-        }
-        .master-toggle-btn.active-yellow {
-            background: rgba(235, 203, 139, 0.2);
-            border-color: #ebcb8b; color: #ebcb8b;
         }
 
         .heist-banner {
@@ -204,19 +239,21 @@
 <div class="scanlines"></div>
 <div id="heistAlertBanner" class="heist-banner">CRITICAL OVERRIDE: MOTION TRACKED ON NODE [HEIST]</div>
 
+<div class="top-status-header">
+    <div class="access-code-display">ACCESS CODE: <span id="displayCode">------</span></div>
+</div>
+
 <div class="matrix-grid" id="nodeMatrix"></div>
 
-<div class="footer-branding">Atulya Tech System Architecture</div>
+<div class="footer-branding">Atulya Tech</div>
 
 <div class="master-console">
     <div class="console-segments">
         <div class="security-clock" id="liveClock">00:00:00</div>
-        <div class="stat-item">NODES: <span id="activeCount">0</span></div>
         <div class="stat-item">PING: <span id="pingCounter">--</span>ms</div>
     </div>
-    <div class="console-buttons">
+    <div>
         <button class="master-toggle-btn active-green" id="boxToggleBtn" onclick="toggleTrackingBoxes()">BOXES: ON</button>
-        <button class="master-toggle-btn" id="globalMuteBtn" onclick="toggleGlobalMute()">MUTED</button>
     </div>
 </div>
 
@@ -226,8 +263,10 @@
     const nodeMatrix = document.getElementById('nodeMatrix');
     const peers = {};
     const streamTimers = {};
-    let isGlobalMuted = true;
-    let showTrackingBoxes = true; // Variable managing layout execution status
+    let showTrackingBoxes = true;
+
+    // Put code directly into the header display element
+    document.getElementById('displayCode').innerText = roomCode.toUpperCase();
 
     socket.emit('join_room', { room: roomCode, role: 'receiver' });
 
@@ -247,7 +286,6 @@
     socket.on('camera_connected', (data) => {
         buildCameraCard(data.id, data.name, data.is_heist);
         connectPeer(data.id);
-        updateNodeCount();
     });
 
     socket.on('camera_disconnected', (data) => {
@@ -255,7 +293,6 @@
         if(targetCard) targetCard.remove();
         if(peers[data.id]) peers[data.id].close();
         clearInterval(streamTimers[data.id]);
-        updateNodeCount();
     });
 
     socket.on('signal', (data) => {
@@ -300,6 +337,9 @@
                 </div>
                 <video id="video-${id}" autoplay playsinline muted onclick="toggleZoom(this)"></video>
                 <canvas id="canvas-${id}" class="motion-layer"></canvas>
+                
+                <button id="mute-${id}" class="feed-audio-toggle muted" onclick="toggleFeedAudio('${id}')">🔇</button>
+                
                 <div class="action-tray">
                     <button class="tray-btn" onclick="takeSnapshot('${id}', '${name}')">📸 CAPTURE</button>
                     <select class="tray-select" onchange="changeQuality('${id}', this.value)">
@@ -319,54 +359,49 @@
         videoElement.classList.toggle('zoomed');
     }
 
-    // Toggle Tracking Boxes Handler Function
-    if (!window.toggleTrackingBoxes) {
-        window.toggleTrackingBoxes = function() {
-            showTrackingBoxes = !showTrackingBoxes;
-            const btn = document.getElementById('boxToggleBtn');
-            if(showTrackingBoxes) {
-                btn.innerText = "BOXES: ON";
-                btn.className = "master-toggle-btn active-green";
+    function toggleFeedAudio(id) {
+        const video = document.getElementById(`video-${id}`);
+        const btn = document.getElementById(`mute-${id}`);
+        if(video && btn) {
+            video.muted = !video.muted;
+            if(video.muted) {
+                btn.innerText = "🔇";
+                btn.classList.add('muted');
             } else {
-                btn.innerText = "BOXES: OFF";
-                btn.className = "master-toggle-btn";
-                // Wipe current floating vectors immediately upon cutoff
-                document.querySelectorAll('.motion-layer').forEach(canvas => {
-                    const ctx = canvas.getContext('2d');
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                });
+                btn.innerText = "🔊";
+                btn.classList.remove('muted');
             }
-        };
+        }
     }
+
+    window.toggleTrackingBoxes = function() {
+        showTrackingBoxes = !showTrackingBoxes;
+        const btn = document.getElementById('boxToggleBtn');
+        if(showTrackingBoxes) {
+            btn.innerText = "BOXES: ON";
+            btn.className = "master-toggle-btn active-green";
+        } else {
+            btn.innerText = "BOXES: OFF";
+            btn.className = "master-toggle-btn";
+            document.querySelectorAll('.motion-layer').forEach(canvas => {
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            });
+        }
+    };
 
     function takeSnapshot(id, name) {
         const video = document.getElementById(`video-${id}`);
         const canvas = document.createElement('canvas');
         canvas.width = video.videoWidth || 640;
         canvas.height = video.videoHeight || 480;
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.createElement('canvas').getContext('2d');
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         
         const link = document.createElement('a');
         link.download = `SNAP_${name.toUpperCase()}_${Date.now()}.png`;
         link.href = canvas.toDataURL();
         link.click();
-    }
-
-    function toggleGlobalMute() {
-        isGlobalMuted = !isGlobalMuted;
-        const btn = document.getElementById('globalMuteBtn');
-        if(isGlobalMuted) {
-            btn.innerText = "MUTED";
-            btn.className = "master-toggle-btn";
-        } else {
-            btn.innerText = "LISTENING";
-            btn.className = "master-toggle-btn active-yellow";
-        }
-
-        document.querySelectorAll('video').forEach(v => {
-            v.muted = isGlobalMuted;
-        });
     }
 
     function changeQuality(id, resValue) {
@@ -392,10 +427,6 @@
             let s = String(sec % 60).padStart(2, '0');
             document.getElementById(`time-${id}`).innerText = `${h}:${m}:${s}`;
         }, 1000);
-    }
-
-    function updateNodeCount() {
-        document.getElementById('activeCount').innerText = Object.keys(peers).length;
     }
 
     function connectPeer(camId) {
@@ -424,7 +455,6 @@
                     canvas.height = video.videoHeight;
                 }
                 
-                // Read pixels into engine memory buffer
                 const bufferCanvas = document.createElement('canvas');
                 bufferCanvas.width = canvas.width;
                 bufferCanvas.height = canvas.height;
@@ -434,7 +464,6 @@
                 
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-                // Only render outline processing parameters if configuration state is active
                 if (priorFrame && showTrackingBoxes) {
                     let minX = canvas.width, maxX = 0, minY = canvas.height, maxY = 0;
                     let hits = 0;
