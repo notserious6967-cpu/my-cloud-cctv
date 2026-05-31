@@ -54,11 +54,10 @@ def on_heist_alarm(data):
     room = data.get('room')
     emit('trigger_alarm', {'cam_id': request.sid}, to=room, include_self=False)
 
+
     if __name__ == '__main__':
-        # Force eventlet production patching inside the script natively
-   	import eventlet
-    	eventlet.monkey_patch()
-    
-    	port = int(os.environ.get('PORT', 5000))
-    	socketio.run(app, host='0.0.0.0', port=port, debug=False)
+        import eventlet
+        eventlet.monkey_patch()
+        port = int(os.environ.get('PORT', 5000))
+        socketio.run(app, host='0.0.0.0', port=port, debug=False)
 
