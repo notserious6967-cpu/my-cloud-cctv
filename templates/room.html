@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Room Options</title>
+    <style>
+        body { font-family: sans-serif; background: #121212; color: white; text-align: center; padding: 40px 20px; }
+        .btn { display: inline-block; width: 80%; max-width: 300px; padding: 20px; margin: 15px; font-size: 18px; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; }
+        .camera-btn { background: #dc3545; }
+        .receiver-btn { background: #007bff; }
+    </style>
+</head>
+<body>
+    <h1>Room Code: <span style="color: #28a745;">{{ room_id }}</span></h1>
+    <p>Choose the role for this device:</p>
+    <a href="/camera/{{ room_id }}" class="btn camera-btn">📷 Join as Camera</a><br>
+    <a href="/receiver/{{ room_id }}" class="btn receiver-btn">📱 Open Receiver Dashboard</a>
+</body>
+</html>
+
