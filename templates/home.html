@@ -1,30 +1,117 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CCTV Hub</title>
+    <title>Atulya Tech Control Gateway</title>
     <style>
-        body { font-family: sans-serif; background: #121212; color: white; text-align: center; padding: 20px; }
-        .card { background: #1e1e1e; padding: 20px; margin: 20px auto; max-width: 400px; border-radius: 8px; }
-        button, input { width: 80%; padding: 12px; margin: 10px 0; border-radius: 5px; border: none; font-size: 16px; }
-        button { background: #007bff; color: white; font-weight: bold; }
-        input { background: #333; color: white; text-align: center; }
+        body {
+            background-color: #1e222b;
+            color: #e5e9f0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .portal-card {
+            background-color: #252a34;
+            border: 1px solid #3b4252;
+            border-radius: 8px;
+            padding: 40px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+        h1 {
+            font-size: 20px;
+            font-weight: 400;
+            margin-bottom: 30px;
+            letter-spacing: 1px;
+            color: #81a1c1;
+        }
+        .action-group {
+            margin-bottom: 25px;
+        }
+        .action-btn {
+            width: 100%;
+            background-color: #5e81ac;
+            color: #e5e9f0;
+            border: none;
+            padding: 12px;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .action-btn:hover { background-color: #81a1c1; }
+        .input-field {
+            width: 100%;
+            background-color: #1e222b;
+            border: 1px solid #3b4252;
+            color: #e5e9f0;
+            padding: 12px;
+            border-radius: 4px;
+            box-sizing: border-box;
+            margin-bottom: 12px;
+            text-align: center;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .input-field:focus { outline: 1px solid #81a1c1; }
+        .footer-sig {
+            margin-top: 40px;
+            font-size: 10px;
+            color: rgba(229, 233, 240, 0.2);
+            font-family: monospace;
+            letter-spacing: 2px;
+        }
     </style>
 </head>
 <body>
-    <h1>🏠 Local CCTV Network</h1>
-    <div class="card">
-        <h3>Create a New Room</h3>
-        <form action="/create" method="POST"><button type="submit">Create Room Dashboard</button></form>
+
+<div class="portal-card">
+    <h1>SURVEILLANCE PORTAL</h1>
+    
+    <div class="action-group">
+        <button class="action-btn" onclick="generateNewRoom()">Create New Session</button>
     </div>
-    <div class="card">
-        <h3>Join Existing Room</h3>
-        <form action="/join" method="POST">
-            <input type="text" name="room_id" placeholder="Enter Room Code" required autocomplete="off"><br>
-            <button type="submit" style="background: #28a745;">Join Room</button>
-        </form>
+    
+    <div style="border-top: 1px solid #3b4252; margin: 25px 0;"></div>
+    
+    <div class="action-group">
+        <input type="text" id="roomInput" class="input-field" placeholder="ENTER ACCESS CODE" maxlength="6">
+        <button class="action-btn" style="background-color: #a3be8c; color: #2e3440;" onclick="joinExistingRoom()">Join Console</button>
     </div>
+
+    <div class="footer-sig">Atulya Tech Architecture</div>
+</div>
+
+<script>
+    function generateNewRoom() {
+        fetch('/create-room', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+            if(data.room_code) {
+                window.location.href = '/receiver/' + data.room_code;
+            }
+        })
+        .catch(err => alert("Session initialization error. check server logs."));
+    }
+
+    function joinExistingRoom() {
+        const code = document.getElementById('roomInput').value.trim().toUpperCase();
+        if(code.length === 6) {
+            window.location.href = '/receiver/' + code;
+        } else {
+            alert("Please input a valid 6-character node token.");
+        }
+    }
+</script>
 </body>
 </html>
 
