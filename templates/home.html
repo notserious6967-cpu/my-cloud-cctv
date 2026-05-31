@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Atulya Tech Control Gateway</title>
+    <title>Gateway Portal</title>
     <style>
         body {
-            background-color: #1e222b;
-            color: #e5e9f0;
+            background-color: #1a1c23;
+            color: #f3f4f6;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
             min-height: 100vh;
@@ -17,82 +18,88 @@
             padding: 20px;
             box-sizing: border-box;
         }
-        .portal-card {
-            background-color: #252a34;
-            border: 1px solid #3b4252;
-            border-radius: 8px;
+        .container {
+            background-color: #222530;
+            border: 1px solid #2e3244;
+            border-radius: 12px;
             padding: 40px;
             width: 100%;
-            max-width: 400px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            max-width: 420px;
             text-align: center;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            margin-bottom: 40px;
         }
-        h1 {
-            font-size: 20px;
-            font-weight: 400;
-            margin-bottom: 30px;
-            letter-spacing: 1px;
-            color: #81a1c1;
-        }
-        .action-group {
-            margin-bottom: 25px;
-        }
-        .action-btn {
+        .btn {
             width: 100%;
-            background-color: #5e81ac;
-            color: #e5e9f0;
-            border: none;
-            padding: 12px;
-            border-radius: 4px;
+            padding: 14px;
+            border-radius: 6px;
             font-size: 14px;
+            font-weight: 600;
+            border: none;
             cursor: pointer;
-            transition: background 0.2s;
+            margin-bottom: 16px;
+            transition: opacity 0.2s;
         }
-        .action-btn:hover { background-color: #81a1c1; }
-        .input-field {
+        .btn-primary { background-color: #5e81ac; color: #fff; }
+        .btn-secondary { background-color: #a3be8c; color: #2e3440; }
+        .btn:hover { opacity: 0.9; }
+        .separator {
+            border-top: 1px solid #2e3244;
+            margin: 25px 0;
+        }
+        .input-box {
             width: 100%;
-            background-color: #1e222b;
-            border: 1px solid #3b4252;
-            color: #e5e9f0;
-            padding: 12px;
-            border-radius: 4px;
+            background-color: #1a1c23;
+            border: 1px solid #2e3244;
+            color: #fff;
+            padding: 14px;
+            border-radius: 6px;
             box-sizing: border-box;
             margin-bottom: 12px;
             text-align: center;
             font-family: monospace;
-            font-size: 14px;
-        }
-        .input-field:focus { outline: 1px solid #81a1c1; }
-        .footer-sig {
-            margin-top: 40px;
-            font-size: 10px;
-            color: rgba(229, 233, 240, 0.2);
-            font-family: monospace;
+            font-size: 16px;
             letter-spacing: 2px;
+        }
+        .input-box:focus { outline: 1px solid #5e81ac; }
+
+        /* Bottom Info Section */
+        .footer-info {
+            text-align: center;
+            font-family: monospace;
+            font-size: 12px;
+            color: #4c566a;
+            line-height: 1.6;
+            letter-spacing: 1px;
+        }
+        .footer-brand {
+            font-size: 14px;
+            font-weight: bold;
+            color: #5e81ac;
+            margin-bottom: 6px;
+            letter-spacing: 1.5px;
         }
     </style>
 </head>
 <body>
 
-<div class="portal-card">
-    <h1>SURVEILLANCE PORTAL</h1>
+<div class="container">
+    <button class="btn btn-primary" onclick="createMonitorSession()">HOST MONITOR CONSOLE</button>
     
-    <div class="action-group">
-        <button class="action-btn" onclick="generateNewRoom()">Create New Session</button>
-    </div>
+    <div class="separator"></div>
     
-    <div style="border-top: 1px solid #3b4252; margin: 25px 0;"></div>
-    
-    <div class="action-group">
-        <input type="text" id="roomInput" class="input-field" placeholder="ENTER ACCESS CODE" maxlength="6">
-        <button class="action-btn" style="background-color: #a3be8c; color: #2e3440;" onclick="joinExistingRoom()">Join Console</button>
-    </div>
+    <input type="text" id="roomCodeInput" class="input-box" placeholder="ENTER ROOM CODE" maxlength="6">
+    <button class="btn btn-secondary" onclick="joinAsCameraNode()">CONNECT CAMERA NODE</button>
+</div>
 
-    <div class="footer-sig">Atulya Tech Architecture</div>
+<div class="footer-info">
+    <div class="footer-brand">ATULYA TECH</div>
+    <div>CONTACTS -</div>
+    <div>EMAIL - notserious6967@gmail.com</div>
 </div>
 
 <script>
-    function generateNewRoom() {
+    function createMonitorSession() {
         fetch('/create-room', { method: 'POST' })
         .then(res => res.json())
         .then(data => {
@@ -100,22 +107,15 @@
                 window.location.href = '/receiver/' + data.room_code;
             }
         })
-        .catch(err => alert("Session initialization error."));
+        .catch(err => alert("Error building session."));
     }
 
-    function joinExistingRoom() {
-        const code = document.getElementById('roomInput').value.trim().toUpperCase();
-        if(code.length !== 6) {
-            alert("Please input a valid 6-character node token.");
-            return;
-        }
-        
-        // Let the user select their device profile role dynamically
-        const choice = confirm("Press OK to join as a MONITOR SCREEN (Receiver).\nPress CANCEL to join as a CAMERA FEED (Transmitter).");
-        if (choice) {
-            window.location.href = '/receiver/' + code;
-        } else {
+    function joinAsCameraNode() {
+        const code = document.getElementById('roomCodeInput').value.trim().toUpperCase();
+        if(code.length === 6) {
             window.location.href = '/camera/' + code;
+        } else {
+            alert("Please enter a valid 6-character Room Code.");
         }
     }
 </script>
